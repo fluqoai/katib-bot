@@ -3,21 +3,42 @@
 # Build:    docker build -f Dockerfile.web -t kateb-web .
 # Run:      docker compose up -d web
 #
-# This image is self-contained: it builds the React client (Vite) so
-# the api/static/client/ directory is fully populated. The image can
+# By default the image is self-contained: it builds the React client
+# (Vite) so api/static/client/ is fully populated and the image can
 # serve the entire user-facing app from a single port (8000).
+#
+# In the Vercel + VPS split deployment, set `FRONTEND_ONLY=true` in
+# the compose build args to skip the heavy Vite build. The image will
+# then serve the API only — Vercel handles the static frontend via
+# its CDN. This saves ~300 MB of node-* packages and ~2-3 min of
+# build time.
+#
+# Build args (set in docker-compose.yml):
+#   FRONTEND_ONLY   "false" (default)  → build the Vite client inside
+#                    "true"              → API-only image (Vercel serves UI)
 FROM python:3.11-slim
+
+ARG FRONTEND_ONLY=false
 
 WORKDIR /app
 
-# OS-level deps for python-docx, PyMuPDF (and `lxml` for python-docx)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential libxml2-dev libxslt-dev curl \
-        # LibreOffice for PDF export (optional — Word-only MVP doesn't need it,
-        # but it's < 200 MB and lets the PDF route work on the VPS).
-        libreoffice-core libreoffice-writer \
-        fonts-noto fonts-noto-extra \
-    && rm -rf /var/lib/apt/lists/*
+# OS-level deps for python-docx, PyMuPDF (lxml) and curl (healthcheck).
+# nodejs/npm is only needed when building the Vite client inside the
+# image (FRONTEND_ONLY=false). LibreOffice is intentionally absent:
+# the Word-only MVP serves DOCX only; the PDF route returns 503 if
+# soffice is missing (see api/letters.py).
+RUN if [ "$FRONTEND_ONLY" = "false" ]; then \
+        apt-get update && apt-get install -y --no-install-recommends \
+            build-essential libxml2-dev libxslt-dev curl \
+            nodejs npm \
+            fonts-noto fonts-noto-extra \
+        && rm -rf /var/lib/apt/lists/*; \
+    else \
+        apt-get update && apt-get install -y --no-install-recommends \
+            build-essential libxml2-dev libxslt-dev curl \
+            fonts-noto fonts-noto-extra \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 # Python deps first (cache layer)
 COPY requirements.txt /app/requirements.txt
@@ -26,13 +47,15 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # App code
 COPY . /app
 
-# Build the client (Vite/React) so api/static/client/ is fully populated
-WORKDIR /app/client
-RUN npm ci || npm install
-RUN npm run build
-# build.py copies dist/ → api/static/client/
-WORKDIR /app
-RUN python client/build.py
+# Build the client (Vite/React) inside the image so api/static/client/
+# is fully populated. Skipped in FRONTEND_ONLY mode.
+RUN if [ "$FRONTEND_ONLY" = "false" ]; then \
+        cd /app/client && npm ci || npm install; \
+        cd /app/client && npm run build; \
+        python client/build.py; \
+    else \
+        echo "FRONTEND_ONLY=true — skipping Vite build (Vercel serves UI)"; \
+    fi
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONIOENCODING=utf-8
