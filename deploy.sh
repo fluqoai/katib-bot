@@ -50,9 +50,12 @@ echo "    use https    : $USE_HTTPS"
 # ---------- 1. System deps ---------------------------------------------------
 echo ">>> Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
+# python3 (version-agnostic) is enough — the Docker images carry their own
+# Python 3.11 runtime, so the host version only needs to exist for certbot,
+# ufw, etc. which are version-tolerant.
 apt-get update
 apt-get install -y --no-install-recommends \
-    python3.11 python3.11-venv python3-pip \
+    python3 python3-venv python3-pip \
     nginx certbot python3-certbot-nginx \
     curl git ca-certificates ufw \
     libreoffice-core libreoffice-writer \
