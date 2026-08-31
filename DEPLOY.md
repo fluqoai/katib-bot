@@ -27,14 +27,23 @@ FastAPI backend + worker run on a **single VPS** (Hetzner / DigitalOcean).
 
 ## 1. DNS (GoDaddy)
 
+The split is **Vercel for the frontend, VPS for the API** — so DNS points
+each role to the right host:
+
 | Type | Host | Value | Notes |
 |------|------|-------|-------|
-| `A` | `@` | `<VPS_IP>` | Frontend (Vercel proxies through) |
-| `A` | `api` | `<VPS_IP>` | Backend direct |
+| `A` | `@` | `76.76.21.21` | **Vercel** (frontend) — use whatever your Vercel domain card shows; `76.76.21.21` is the default anycast IP |
+| `A` | `api` | `<VPS_IP>` | **VPS** (API) |
+| `CNAME` | `www` | `katibai.xyz` | Optional — `www` → apex (so both work) |
 
-(Optionally add a `CNAME` for `www` → `@` if you want both `katibai.xyz` and `www.katibai.xyz`.)
+**Important:** the apex `A` record must point at **Vercel**, not the VPS.
+Vercel is what serves the React SPA. The VPS only serves the API on the
+`api.` subdomain, and Vercel's `vercel.json` rewrites `/api/*` to it.
 
-**Wait for DNS propagation** (1–5 min for new records, up to 30 min for changes) before running certbot.
+**Wait for DNS propagation** (1–5 min for new records, up to 30 min for
+changes, depending on the resolver's TTL). Use `Resolve-DnsName
+katibai.xyz -Server 1.1.1.1` to check from a fresh resolver; the
+default Windows resolver often caches the old value longest.
 
 ---
 

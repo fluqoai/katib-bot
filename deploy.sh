@@ -132,7 +132,7 @@ upstream kateb_web {
 server {
     listen 80;
     listen [::]:80;
-    server_name ${DOMAIN} ${API_SUBDOMAIN}.${DOMAIN};
+    server_name ${API_SUBDOMAIN}.${DOMAIN};
 
     location /.well-known/acme-challenge/ {
         root /var/www/html;
@@ -143,40 +143,10 @@ server {
     }
 }
 
-# HTTPS for the main domain (${DOMAIN})
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
-    server_name ${DOMAIN};
-
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-    ssl_ciphers         HIGH:!aNULL:!MD5;
-    ssl_prefer_server_ciphers on;
-
-    client_max_body_size 50M;
-
-    # Static assets — long cache, immutable filenames
-    location /assets/ {
-        proxy_pass http://kateb_web;
-        proxy_set_header Host \$host;
-        proxy_cache_valid 200 365d;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-    }
-
-    # SPA fallback
-    location / {
-        proxy_pass http://kateb_web;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-
-# API on a dedicated subdomain (${API_SUBDOMAIN}.${DOMAIN})
+# API on a dedicated subdomain (${API_SUBDOMAIN}.${DOMAIN}).
+# The frontend (${DOMAIN}) is served by Vercel — its DNS A record
+# points to Vercel, not here, so no ${DOMAIN} server block is needed
+# on the VPS.
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
