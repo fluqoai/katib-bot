@@ -33,6 +33,8 @@ google-generativeai==0.8.3
 # Document parsing
 python-docx==1.1.2          # .docx text extraction
 pymupdf==1.24.13            # .pdf text extraction (fitz)
+# tiktoken — token counting for the chunker (256-token hard cap)
+tiktoken==0.12.0
 
 # Pydantic + settings
 pydantic==2.9.2
