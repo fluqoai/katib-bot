@@ -66,17 +66,18 @@ export default function Processing({
       use_legacy_template: useLegacyTemplate,
       style_overrides: styleOverrides,
     })
-      .then((r) => {
+      .then((r: GenerateResult) => {
         if (cancelled) return
         timerIds.forEach((t) => clearTimeout(t))
         setActiveStep(STEPS.length)
         // brief pause to let the user see the final "done" state
         window.setTimeout(() => onDone(r), 350)
       })
-      .catch((e) => {
+      .catch((e: unknown) => {
         if (cancelled) return
         timerIds.forEach((t) => clearTimeout(t))
-        setError(String(e?.message || e))
+        const message = e instanceof Error ? e.message : String(e)
+        setError(message)
       })
 
     return () => {

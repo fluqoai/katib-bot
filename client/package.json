@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --port 5175"
+    "preview": "vite preview --port 5175",
+    "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
     "framer-motion": "^11.3.19",

@@ -1,0 +1,25 @@
+# Normalize line endings on commit so we don't have mixed LF/CRLF.
+# Source code stays LF; shell + Windows scripts get CRLF.
+* text=auto eol=lf
+
+# Shell + PowerShell scripts — keep CRLF for direct execution on Windows
+*.sh        eol=lf
+*.bash      eol=lf
+*.ps1       eol=crlf
+*.bat       eol=crlf
+*.cmd       eol=crlf
+
+# Windows-only artifacts
+Dockerfile.web   eol=lf
+Dockerfile.worker eol=lf
+docker-compose.yml eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.docx binary
+*.xlsx binary

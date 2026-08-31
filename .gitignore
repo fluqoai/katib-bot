@@ -100,6 +100,21 @@ api/static/admin/
 api/static/index.html
 api/static/client/
 
+# Git credentials (stored by Windows credential helper)
+Userskhayrat.git-credentials-safecredentials
+
+# Diagnostic / one-off build output files (created during local debugging)
+tests/_amend.txt
+tests/_git_push.txt
+tests/_git_staged.txt
+tests/_local_build.txt
+tests/_vercel_build_test.txt
+tests/_vercel_build_test2.txt
+tests/_*_output.txt
+tests/_phase*_smoke.py
+tests/_phase*_diag.py
+tests/_phase*_demo.txt
+
 # Drive ingestion is fully removed (deprecated). The whole directory
 # is gitignored — the canonical import path is `rag.categories`.
 drive/
