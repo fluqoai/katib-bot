@@ -4,6 +4,10 @@
 # Web server (FastAPI)
 fastapi==0.115.4
 uvicorn[standard]==0.32.0
+# python-multipart is required for FastAPI's File / Form parsing
+# (used by /api/admin/upload and other multipart endpoints). FastAPI
+# raises RuntimeError at startup if it's not installed.
+python-multipart==0.0.20
 
 # Telegram bot (v21+ has native asyncio) — optional, runs alongside web
 python-telegram-bot[ext]==21.6
