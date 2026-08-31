@@ -1,0 +1,124 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+env/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Secrets & local config — NEVER commit
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+service-account*.json
+credentials*.json
+token*.json
+
+# Logs
+*.log
+logs/
+
+# Runtime
+*.pid
+*.sock
+data/
+ingestion_cache/
+.tmp/
+
+# User's reference documents (downloaded from Drive, may contain PII)
+reference_docs/
+output/
+exports/
+
+# Built frontend bundle (built on the server / by Vercel)
+client/dist/
+client/node_modules/
+api/static/client/assets/
+
+# Acceptance tests — production code + the actual acceptance suite
+# (tests/acceptance/) are committed. Everything else (underscore-prefixed
+# diagnostic scripts, phase outputs, run reports, stale fixtures) is
+# ephemeral and regenerated on every run.
+tests/_outputs/
+tests/_phase*_outputs/
+tests/_uat_outputs/
+tests/_*.py
+tests/_*_output.txt
+tests/_*_outputs/
+tests/_*_input.docx
+tests/_phase3_demo.txt
+tests/SETUP_BUCKETS.md
+tests/test_drive_sync.deprecated.py
+tests/acceptance/_*.py
+tests/acceptance/_*.txt
+tests/acceptance/fixtures/v*_isolation_*.docx
+tests/acceptance/reports/
+# Keep the canonical test fixture (test_05 needs it)
+# tests/acceptance/fixtures/test_volunteer_policy.docx IS committed
+
+# Old built artifacts (the new build lives in client/dist/ and is
+# created by client/build.py; these pre-built static dirs are stale).
+api/static/admin/
+api/static/index.html
+api/static/client/
+
+# Drive ingestion is fully removed (deprecated). The whole directory
+# is gitignored — the canonical import path is `rag.categories`.
+drive/
+
+# The `admin/` directory is the old admin panel (replaced by `client/`).
+# It is kept locally for reference but is not part of the production app.
+# All heavy build artifacts (node_modules, dist) are gitignored.
+admin/node_modules/
+admin/dist/
+admin/tsconfig.tsbuildinfo
+# NOTE: we keep admin/src/, admin/package.json, admin/index.html, and
+# admin/build.py in the repo as historical reference. If you want to
+# remove them entirely, do `rm -rf admin/` — but do that in a separate
+# commit so the history is clear.
+
+# Indexed/legacy data left over from initial development. Not part of
+# the running app.
+INDEX_*.json
+INDEX_*.txt
+how_to_connect.txt
+
+

@@ -1,0 +1,1 @@
+"""Kateb FastAPI web server."""

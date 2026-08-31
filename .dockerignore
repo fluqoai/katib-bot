@@ -1,0 +1,64 @@
+# Reduce Docker context size + keep secrets out of the image
+# (these mirror .gitignore, plus a few Docker-specific exclusions)
+
+# Git
+.git/
+.gitignore
+
+# Secrets (mounted via env_file at runtime, NEVER baked into the image)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+service-account*.json
+credentials*.json
+token*.json
+
+# Tests + diagnostics (the user runs the acceptance suite against the
+# live deployment, not as part of the image build)
+tests/
+docs/
+how_to_connect.txt
+INDEX_*.json
+INDEX_*.txt
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Runtime + build artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.log
+logs/
+data/
+.tmp/
+
+# Frontend build artifacts (Dockerfile.web rebuilds the client
+# inside the image; we don't want the host's stale build cached)
+client/dist/
+client/node_modules/
+
+# Built backend bundle (Dockerfile.web copies the source and rebuilds
+# the client into api/static/client/ — the host's pre-built assets
+# would otherwise shadow the in-image build)
+api/static/client/
+
+# User's reference documents (downloaded from Drive, may contain PII;
+# they belong in the index, not the image)
+reference_docs/
+output/
+exports/
+ingestion_cache/
+
+# Python packaging
+*.egg-info/
+build/
+dist/

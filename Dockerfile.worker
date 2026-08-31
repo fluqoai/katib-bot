@@ -1,0 +1,36 @@
+# Kateb worker — production daemon
+# Used as a long-running service. Auto-restart on failure.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# OS-level deps for python-docx, PyMuPDF, pytesseract
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng \
+        libreoffice \
+        fonts-noto fonts-noto-extra \
+        poppler-utils \
+        build-essential \
+        libxml2-dev libxslt-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python deps
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# App code
+COPY . /app
+
+# Default: run the long-running worker. Override with CMD to run the
+# web server or a one-off script.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONIOENCODING=utf-8
+
+# Healthcheck: the worker has no HTTP port; we use the reaper log
+# activity as a proxy. Just confirm the process is alive.
+HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=3 \
+    CMD pgrep -f "scripts.worker.py" >/dev/null || exit 1
+
+# Default to 5-second poll + 200-chunk session budget. Override via
+# environment variables or by passing extra args.
+CMD ["python", "scripts/worker.py", "--poll-interval", "5", "--chunk-budget", "200"]

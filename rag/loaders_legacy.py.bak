@@ -1,0 +1,73 @@
+"""File loaders — turn .docx, .pdf, .md, .txt into plain text.
+
+Each loader returns a string. Used by `scripts/ingest_local.py` (the
+recommended path) and `drive/sync.py` (the optional Drive path).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+
+SUPPORTED_EXTS = {".md", ".markdown", ".txt", ".docx", ".pdf"}
+
+
+def load_text(path: Path) -> str:
+    """Plain text / Markdown — just read it."""
+    return path.read_text(encoding="utf-8")
+
+
+def load_docx(path: Path) -> str:
+    """Extract text from a .docx, preserving paragraph + table structure."""
+    from docx import Document  # python-docx
+
+    doc = Document(str(path))
+    parts: list[str] = []
+
+    for para in doc.paragraphs:
+        text = para.text
+        if text.strip():
+            parts.append(text)
+
+    for table in doc.tables:
+        for row in table.rows:
+            row_text = " | ".join(cell.text.strip() for cell in row.cells)
+            if row_text.strip():
+                parts.append(row_text)
+
+    return "\n\n".join(parts)
+
+
+def load_pdf(path: Path) -> str:
+    """Extract text from a .pdf via PyMuPDF.
+
+    Each page becomes its own paragraph. RTL text is preserved as-is
+    in the string; downstream the embedding model handles the script
+    direction.
+    """
+    import fitz  # PyMuPDF
+
+    doc = fitz.open(str(path))
+    try:
+        parts = [page.get_text() for page in doc]
+    finally:
+        doc.close()
+    return "\n\n".join(parts)
+
+
+def load_any(path: Path) -> str:
+    """Dispatch by file extension. Raises ValueError for unsupported types."""
+    ext = path.suffix.lower()
+    if ext in (".md", ".markdown", ".txt"):
+        return load_text(path)
+    if ext == ".docx":
+        return load_docx(path)
+    if ext == ".pdf":
+        return load_pdf(path)
+    raise ValueError(
+        f"Unsupported file extension: {ext!r} (file: {path.name}). "
+        f"Supported: {sorted(SUPPORTED_EXTS)}"
+    )
+
+
+__all__ = ["load_text", "load_docx", "load_pdf", "load_any", "SUPPORTED_EXTS"]

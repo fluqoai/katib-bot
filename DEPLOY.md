@@ -1,0 +1,157 @@
+# Kateb — deployment guide
+
+This document describes how to deploy Kateb to production. The architecture
+is **split**: the React frontend is hosted on **Vercel** (CDN), and the
+FastAPI backend + worker run on a **single VPS** (Hetzner / DigitalOcean).
+
+```
+                          ┌──────────────────────────┐
+   user ── HTTPS ────────▶│ Vercel CDN               │
+                          │ katibai.xyz              │
+                          │   (React SPA)            │
+                          └──────────┬───────────────┘
+                                     │ /api/* rewrite
+                                     ▼
+                          ┌──────────────────────────┐
+                          │ VPS (Hetzner CX22 €4.85) │
+                          │ api.katibai.xyz          │
+                          │  ┌─ nginx (TLS)          │
+                          │  ├─ FastAPI (uvicorn)    │──▶ Supabase
+                          │  └─ worker.py (systemd)  │     (Postgres + Storage)
+                          │                          │
+                          │                          │──▶ OpenRouter (LLM)
+                          └──────────────────────────┘
+```
+
+---
+
+## 1. DNS (GoDaddy)
+
+| Type | Host | Value | Notes |
+|------|------|-------|-------|
+| `A` | `@` | `<VPS_IP>` | Frontend (Vercel proxies through) |
+| `A` | `api` | `<VPS_IP>` | Backend direct |
+
+(Optionally add a `CNAME` for `www` → `@` if you want both `katibai.xyz` and `www.katibai.xyz`.)
+
+**Wait for DNS propagation** (5–30 min) before continuing.
+
+---
+
+## 2. VPS provisioning (Hetzner CX22 — €4.85/month)
+
+```bash
+# 1. Create the VM: Ubuntu 24.04, FSN1 (Falkenstein) or your closest region
+# 2. SSH in as root:
+ssh root@<VPS_IP>
+
+# 3. Create a non-root user and harden SSH
+adduser kateb --disabled-password --gecos ""
+usermod -aG sudo kateb
+# Add your public key to /home/kateb/.ssh/authorized_keys
+# Disable root login + password auth in /etc/ssh/sshd_config, then:
+systemctl restart sshd
+```
+
+---
+
+## 3. Deploy the backend on the VPS
+
+```bash
+# As the kateb user
+sudo apt update && sudo -y install git
+git clone https://github.com/fluqoai/katib-bot.git /opt/kateb
+cd /opt/kateb
+
+# Configure
+cp .env.example .env
+nano .env   # fill in SUPABASE_*, OPENROUTER_API_KEY, etc.
+
+# One-shot install + start
+sudo bash deploy.sh
+```
+
+`deploy.sh` will:
+1. Install Python 3.11, nginx, certbot, LibreOffice, Docker
+2. Build the Docker images (web + worker)
+3. Start them via docker compose
+4. Configure nginx as a reverse proxy
+5. Request a Let's Encrypt cert (needs `EMAIL` env var)
+
+After it finishes, the API is live at `https://api.katibai.xyz/api/health`.
+
+---
+
+## 4. Deploy the frontend on Vercel
+
+1. Go to [vercel.com](https://vercel.com) → Sign up with GitHub
+2. **Add New Project** → import `fluqoai/katib-bot`
+3. Vercel auto-detects the Vite framework. Override:
+   - **Build command:** `npm --prefix client run build`
+   - **Output directory:** `client/dist`
+   - **Install command:** `npm --prefix client ci`
+4. **Environment variables:** (none needed for the client)
+5. **Deploy** → Vercel gives you a `<hash>.vercel.app` URL
+6. **Add domain** → `katibai.xyz` (and `www.katibai.xyz`)
+7. Vercel auto-issues a Let's Encrypt cert
+
+The `vercel.json` at the repo root already configures:
+- `/api/*` rewrite → `https://api.katibai.xyz/api/*`
+- SPA fallback (every unknown path → `index.html`)
+- Security headers + 1-year immutable cache for `/assets/*`
+
+---
+
+## 5. Wire CORS on the backend
+
+The backend needs to allow the Vercel frontend origin. Edit `.env` on the VPS:
+
+```bash
+CORS_ORIGINS=https://katibai.xyz,https://www.katibai.xyz
+```
+
+Then restart:
+
+```bash
+cd /opt/kateb
+sudo docker compose restart web
+```
+
+---
+
+## 6. Verify
+
+- Frontend: https://katibai.xyz (should load the React SPA)
+- API health: https://api.katibai.xyz/api/health (should return `{"status":"ok",...}`)
+- CORS: open browser dev tools → Network → make a request → check the `Access-Control-Allow-Origin` header
+
+---
+
+## 7. Updates
+
+```bash
+# On the VPS
+cd /opt/kateb
+git pull
+sudo docker compose build
+sudo docker compose up -d
+
+# Frontend
+# Just `git push` — Vercel auto-deploys on every commit to main.
+```
+
+---
+
+## Cost
+
+| Item | Provider | Cost |
+|------|----------|------|
+| VPS (CX22) | Hetzner | €4.85/month (~$5.30) |
+| Domain (katibai.xyz) | GoDaddy | ~$12/year |
+| SSL | Let's Encrypt | Free |
+| DDoS / DNS proxy | Cloudflare (optional) | Free |
+| Supabase (Pro) | Supabase | $25/month (only if you outgrow free tier) |
+| OpenRouter (LLM) | OpenRouter | pay per token, ~$5–50/month at MVP scale |
+| Vercel | Vercel | Free tier is fine for MVP |
+
+**Total: ~$5/month + LLM usage (~< $50/month).**

@@ -1,0 +1,74 @@
+version: "3.9"
+
+# =============================================================================
+# Kateb — production stack
+#
+# This compose file is what runs on the VPS. It is intentionally
+# minimal: two services (web + worker) plus an opt-in bot profile.
+#
+# The frontend (React/Vite) is built INSIDE the web image so the image
+# is self-contained: a single port (8000) serves both the API and the
+# static client. The `client/dist/` directory is baked in.
+#
+# For the SPLIT deployment (Vercel for the frontend, VPS for the
+# backend), set `FRONTEND_ONLY=true` in `.env` and skip the Vite build
+# step — the image will serve the API only.
+# =============================================================================
+
+x-base-env: &base-env
+  env_file:
+    - .env
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # When deploying with Vercel handling the frontend, set
+        # FRONTEND_ONLY=true to skip the heavy Vite build (~30s saved).
+        - FRONTEND_ONLY=${FRONTEND_ONLY:-false}
+    container_name: kateb-web
+    restart: unless-stopped
+    <<: *base-env
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - worker
+    # Uvicorn workers (processes, not Docker replicas)
+    # The Dockerfile already sets --workers 2. Override with WEB_WORKERS.
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: kateb-worker
+    restart: unless-stopped
+    <<: *base-env
+    command: ["python", "scripts/worker.py", "--poll-interval", "5", "--chunk-budget", "200"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "scripts.worker.py"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: kateb-bot
+    restart: unless-stopped
+    <<: *base-env
+    command: ["python", "-m", "bot.main"]
+    profiles: ["bot"]  # opt-in: `docker compose --profile bot up -d`

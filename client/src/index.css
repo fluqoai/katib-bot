@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    font-family: 'Tajawal', 'Cairo', system-ui, sans-serif;
+    font-feature-settings: "kern" 1, "liga" 1;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  /* nicer Arabic number alignment */
+  .tabular-arabic {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-sage-600 px-5 py-3.5
+           text-base font-bold text-white shadow-soft transition
+           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary:hover { @apply bg-sage-700 shadow-soft-lg; }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-sage-300 bg-white
+           px-5 py-3.5 text-base font-semibold text-sage-800 shadow-soft
+           transition active:scale-[0.98] disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2
+           text-sm font-semibold text-sage-700 transition;
+  }
+  .btn-ghost:hover { @apply bg-sage-100; }
+  .input-base {
+    @apply w-full rounded-2xl border border-sage-200 bg-white px-4 py-3.5 text-base
+           text-ink-900 shadow-soft outline-none transition
+           placeholder:text-ink-300;
+  }
+  .input-base:focus { @apply border-sage-500 shadow-sage-glow; }
+  .card {
+    @apply rounded-3xl border border-sage-100 bg-white p-6 shadow-soft;
+  }
+  .card-quiet {
+    @apply rounded-2xl border border-sage-100 bg-linen/60 p-5;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold;
+  }
+  .pill-sage  { @apply bg-sage-100 text-sage-800; }
+  .pill-wood  { @apply bg-wood-100 text-wood-800; }
+  .pill-rose  { @apply bg-rose-50 text-rose-700; }
+  .pill-amber { @apply bg-amber-50 text-amber-800; }
+  .pill-slate { @apply bg-slate-100 text-slate-700; }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep scrolling */
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Skeleton loading gradient */
+  .skeleton {
+    background: linear-gradient(90deg,
+      rgba(207, 213, 190, 0.35) 25%,
+      rgba(168, 181, 143, 0.6)  50%,
+      rgba(207, 213, 190, 0.35) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+}
