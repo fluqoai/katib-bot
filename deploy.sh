@@ -127,12 +127,13 @@ upstream kateb_web {
     server 127.0.0.1:${HTTP_PORT};
 }
 
-# Redirect all HTTP to HTTPS (when certs are present)
+# HTTP → HTTPS redirect, with the ACME http-01 challenge exempted so
+# certbot renewals continue to work.
 server {
     listen 80;
+    listen [::]:80;
     server_name ${DOMAIN} ${API_SUBDOMAIN}.${DOMAIN};
 
-    # ACME http-01 challenge
     location /.well-known/acme-challenge/ {
         root /var/www/html;
     }
@@ -142,10 +143,18 @@ server {
     }
 }
 
-# HTTPS
+# HTTPS for the main domain (${DOMAIN})
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name ${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
 
     client_max_body_size 50M;
 
@@ -167,10 +176,18 @@ server {
     }
 }
 
-# API on a dedicated subdomain (api.katibai.xyz)
+# API on a dedicated subdomain (${API_SUBDOMAIN}.${DOMAIN})
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name ${API_SUBDOMAIN}.${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
 
     client_max_body_size 50M;
 
@@ -191,15 +208,24 @@ ln -sf /etc/nginx/sites-available/kateb /etc/nginx/sites-enabled/kateb
 nginx -t && systemctl reload nginx
 
 # ---------- 9. SSL ----------------------------------------------------------
+# We use certonly --webroot (NOT the --nginx plugin) so this step works
+# whether or not the nginx config above is already valid. The ACME
+# http-01 challenge is served by the HTTP block above (location match
+# takes precedence over the 301 redirect).
 if [[ "$USE_HTTPS" == "true" ]]; then
   if [[ -n "$EMAIL" ]]; then
     echo ">>> Requesting Let's Encrypt cert for ${DOMAIN} and ${API_SUBDOMAIN}.${DOMAIN}"
-    certbot --nginx \
+    mkdir -p /var/www/html
+    certbot certonly --webroot -w /var/www/html \
       --non-interactive --agree-tos -m "$EMAIL" \
       -d "$DOMAIN" -d "${API_SUBDOMAIN}.${DOMAIN}"
+    systemctl reload nginx
   else
-    echo ">>> EMAIL not set, skipping certbot. Run manually:"
-    echo "    certbot --nginx -d ${DOMAIN} -d ${API_SUBDOMAIN}.${DOMAIN}"
+    echo ">>> EMAIL not set, skipping certbot. To enable HTTPS run:"
+    echo "    EMAIL=you@example.com certbot certonly --webroot -w /var/www/html \\"
+    echo "      --non-interactive --agree-tos -m you@example.com \\"
+    echo "      -d ${DOMAIN} -d ${API_SUBDOMAIN}.${DOMAIN}"
+    echo "    systemctl reload nginx"
   fi
 fi
 
