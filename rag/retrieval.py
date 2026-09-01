@@ -110,6 +110,7 @@ async def retrieve_templates(
     supabase: Client,
     query: str,
     *,
+    embedding: list[float] | None = None,
     top_k: int = 5,
     threshold: float = 0.20,
 ) -> RetrievalResult:
@@ -121,7 +122,7 @@ async def retrieve_templates(
     one template even when the wording is loose. The generator
     picks the best one from the top few hits.
     """
-    vec = await _embed_one(embedder, query)
+    vec = embedding if embedding is not None else await _embed_one(embedder, query)
     hits = await _rpc(
         supabase, vec,
         category="templates", threshold=threshold, top_k=top_k,
@@ -134,11 +135,12 @@ async def retrieve_policies(
     supabase: Client,
     query: str,
     *,
+    embedding: list[float] | None = None,
     top_k: int = 8,
     threshold: float = 0.25,
 ) -> RetrievalResult:
     """Find internal policies relevant to the user's request."""
-    vec = await _embed_one(embedder, query)
+    vec = embedding if embedding is not None else await _embed_one(embedder, query)
     hits = await _rpc(
         supabase, vec,
         category="internal_policies", threshold=threshold, top_k=top_k,
@@ -151,11 +153,12 @@ async def retrieve_regulations(
     supabase: Client,
     query: str,
     *,
+    embedding: list[float] | None = None,
     top_k: int = 8,
     threshold: float = 0.25,
 ) -> RetrievalResult:
     """Find national regulations relevant to the user's request."""
-    vec = await _embed_one(embedder, query)
+    vec = embedding if embedding is not None else await _embed_one(embedder, query)
     hits = await _rpc(
         supabase, vec,
         category="national_regulations", threshold=threshold, top_k=top_k,

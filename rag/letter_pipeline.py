@@ -51,6 +51,7 @@ from rag.embeddings import EmbeddingClient
 from rag.evidence import EvidenceBundle, SourceChunk, build_evidence
 from rag.export import (
     TemplateProfile,
+    build_official_branded_letter,
     build_letter_from_template,
     build_pdf,
     has_soffice,
@@ -216,10 +217,10 @@ class LetterPipeline:
             await self._stage_retrieval(ctx)
             await self._stage_evidence(ctx)
             if not ctx.bundle.has_template():
-                ctx.checkpoint("evidence", "no_template",
-                               "لا يوجد قالب مطابق في الفهرس")
-                return self._finalize(ctx, status="no_template",
-                                       error="لا يوجد قالب مطابق")
+                ctx.checkpoint(
+                    "evidence", "ok",
+                    "لا يوجد قالب مسترجع؛ سيُستخدم قالب الجمعية الرسمي الثابت",
+                )
             await self._stage_draft(ctx)
             await self._stage_compliance(ctx)
             await self._stage_correct(ctx)
@@ -305,11 +306,16 @@ class LetterPipeline:
         pq = (ctx.intent.policy_query     if ctx.intent and ctx.intent.policy_query     else ctx.user_request)
         rq = (ctx.intent.regulation_query if ctx.intent and ctx.intent.regulation_query else ctx.user_request)
 
+        # Embed all three refined queries in one provider request. The
+        # OpenRouter free embedding endpoint rate-limits three simultaneous
+        # single-text calls, while its batch endpoint is both faster and more
+        # reliable.
+        vectors = await self.embedder.embed_texts([tq, pq, rq])
         import asyncio
         ctx.templates, ctx.policies, ctx.regulations = await asyncio.gather(
-            retrieve_templates(self.embedder, self.supabase, tq),
-            retrieve_policies(self.embedder, self.supabase, pq),
-            retrieve_regulations(self.embedder, self.supabase, rq),
+            retrieve_templates(self.embedder, self.supabase, tq, embedding=vectors[0]),
+            retrieve_policies(self.embedder, self.supabase, pq, embedding=vectors[1]),
+            retrieve_regulations(self.embedder, self.supabase, rq, embedding=vectors[2]),
         )
         ctx.checkpoint(
             "retrieval", "ok",
@@ -429,6 +435,36 @@ class LetterPipeline:
             ctx.docx_bytes = None
             ctx.pdf_bytes = None
             ctx.checkpoint("export", "skipped", "no draft to export")
+            return
+
+        # The organization-provided letterhead is the single export design
+        # authority. It is bundled with the application so vector retrieval
+        # can influence content, never the official document structure.
+        official_template = (
+            Path(__file__).resolve().parent.parent
+            / "assets"
+            / "official-letter-template.docx"
+        )
+        if not official_template.exists():
+            ctx.docx_bytes = None
+            ctx.pdf_bytes = None
+            ctx.checkpoint("export", "failed", f"official template missing: {official_template}")
+            return
+        try:
+            docx, profile = build_official_branded_letter(official_template, out_draft)
+            ctx.docx_bytes = docx
+            ctx.template_profile = profile
+            ctx.export_used_template = True
+            ctx.pdf_bytes = build_pdf(docx) if has_soffice() else None
+            ctx.checkpoint(
+                "export", "ok",
+                f"docx={len(docx)}B pdf={'yes' if ctx.pdf_bytes else 'no'} mode=official_brand",
+            )
+            return
+        except Exception as e:  # noqa: BLE001
+            ctx.docx_bytes = None
+            ctx.pdf_bytes = None
+            ctx.checkpoint("export", "failed", f"official template export failed: {type(e).__name__}: {e}")
             return
 
         # ------------------------------------------------------------------

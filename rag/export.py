@@ -176,10 +176,21 @@ def _strip_citation_tags(text: str) -> str:
 
 # OOXML namespace for w: tags (used to set bidi / rtl directly)
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+OFFICIAL_TEXT_RGB = (0x33, 0x57, 0x6F)
 
 
-def _apply_rtl_to_paragraph(paragraph, *, font_size_pt: float | None = None,
-                            bold: bool = False, space_after_pt: float | None = 6.0) -> None:
+def _apply_rtl_to_paragraph(
+    paragraph,
+    *,
+    font_size_pt: float | None = None,
+    font_name: str | None = None,
+    font_color_rgb: tuple[int, int, int] = OFFICIAL_TEXT_RGB,
+    bold: bool = False,
+    alignment: str = "right",
+    space_before_pt: float | None = None,
+    space_after_pt: float | None = 6.0,
+    line_spacing: float | None = None,
+) -> None:
     """Apply explicit Arabic RTL formatting to a paragraph and its runs.
 
     This sets the OOXML properties that are required for unambiguous
@@ -188,7 +199,7 @@ def _apply_rtl_to_paragraph(paragraph, *, font_size_pt: float | None = None,
 
       - <w:pPr><w:bidi/></w:pPr>          paragraph direction RTL
       - <w:rPr><w:rtl/></w:rPr>          Unicode RTL on each run
-      - alignment: right                 visual right-to-left alignment
+      - explicit role-based alignment    right, justified, or centred
       - font size (optional)             preserve template size
       - bold (optional)                  for headings / labels
       - <w:spacing w:after="..."/>       paragraph spacing
@@ -196,14 +207,29 @@ def _apply_rtl_to_paragraph(paragraph, *, font_size_pt: float | None = None,
     The Word UI lets users override these per-document, so the file
     remains editable in any language.
     """
-    from docx.shared import Pt
+    from docx.shared import Pt, RGBColor
     from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
     from lxml import etree
 
     pf = paragraph.paragraph_format
-    pf.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
+    alignments = {
+        # Word mirrors physical left/right alignment when <w:bidi/> is active.
+        # LEFT therefore renders on the visual right for an RTL paragraph,
+        # matching the organisation's original Arabic letters.
+        "right": WD_PARAGRAPH_ALIGNMENT.LEFT,
+        "justify": WD_PARAGRAPH_ALIGNMENT.JUSTIFY,
+        "center": WD_PARAGRAPH_ALIGNMENT.CENTER,
+    }
+    try:
+        pf.alignment = alignments[alignment]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported paragraph alignment: {alignment}") from exc
+    if space_before_pt is not None:
+        pf.space_before = Pt(space_before_pt)
     if space_after_pt is not None:
         pf.space_after = Pt(space_after_pt)
+    if line_spacing is not None:
+        pf.line_spacing = line_spacing
 
     # Set <w:bidi/> in <w:pPr> for explicit paragraph direction
     pPr = paragraph._p.get_or_add_pPr()
@@ -215,10 +241,23 @@ def _apply_rtl_to_paragraph(paragraph, *, font_size_pt: float | None = None,
 
     # Apply font / bold / RTL to every run
     for run in paragraph.runs:
+        # Use a literal colour rather than Word's theme-dependent "Automatic"
+        # colour. The approved blue is legible on the mandatory letterhead in
+        # both Word's normal and dark application themes.
+        run.font.color.rgb = RGBColor(*font_color_rgb)
+        color = run._r.get_or_add_rPr().find(f"{{{W_NS}}}color")
+        if color is not None:
+            for attribute in ("themeColor", "themeTint", "themeShade"):
+                color.attrib.pop(f"{{{W_NS}}}{attribute}", None)
         if font_size_pt is not None:
             run.font.size = Pt(font_size_pt)
-        if bold:
-            run.bold = True
+        if font_name is not None:
+            run.font.name = font_name
+            r_fonts = run._r.get_or_add_rPr().get_or_add_rFonts()
+            for script in ("ascii", "hAnsi", "eastAsia", "cs"):
+                r_fonts.set(f"{{{W_NS}}}{script}", font_name)
+        run.font.complex_script = True
+        run.bold = bold
         # Set <w:rtl/> in run's rPr
         rPr = run._r.get_or_add_rPr()
         for existing in rPr.findall(f"{{{W_NS}}}rtl"):
@@ -590,6 +629,92 @@ def build_letter_from_template(
     return out_path.read_bytes(), profile
 
 
+def build_official_branded_letter(
+    template_path: Path,
+    draft: GeneratedDraft,
+    *,
+    out_path: Path | None = None,
+) -> tuple[bytes, TemplateProfile]:
+    """Place the locked letter text on the association's branded letterhead.
+
+    The supplied DOCX is the mandatory blank A4 letterhead. Its headers,
+    footers, relationships, and embedded artwork are preserved byte-for-byte;
+    only the document body is replaced. Formatting follows the organisation's
+    existing formal-letter examples and uses the approved literal blue ink.
+    """
+    try:
+        from docx import Document
+        from docx.shared import Cm
+    except ImportError as e:  # noqa: BLE001
+        raise RuntimeError("python-docx is required for DOCX export") from e
+
+    doc = Document(str(template_path))
+    profile = extract_template_profile(template_path)
+    body = doc.element.body
+    for child in list(body):
+        if not child.tag.endswith("}sectPr"):
+            body.remove(child)
+
+    clean_text = _strip_citation_tags(draft.body_only or draft.body or "")
+    significant = [line.strip() for line in clean_text.splitlines() if line.strip()]
+    if len(significant) < 7:
+        raise ValueError("Official letter must contain the seven locked structural elements")
+
+    # Match the closest original formal-letter reference while retaining the
+    # mandatory supplied letterhead itself without any image manipulation.
+    section = doc.sections[0]
+    section.top_margin = Cm(5.25)
+    section.right_margin = Cm(1.5)
+    section.bottom_margin = Cm(2.25)
+    section.left_margin = Cm(1.5)
+
+    final_index = len(significant) - 1
+    closing_index = final_index - 1
+    for index, line in enumerate(significant):
+        paragraph = doc.add_paragraph()
+        paragraph.add_run(line)
+
+        if index == 0:  # recipient
+            formatting = dict(
+                font_name="Times New Roman", font_size_pt=16.0, bold=True,
+                alignment="right", space_after_pt=12.0,
+            )
+        elif index == 1:  # subject
+            formatting = dict(
+                font_name="Times New Roman", font_size_pt=14.0, bold=True,
+                alignment="right", space_after_pt=12.0,
+            )
+        elif index in (2, 3):  # greeting and transition
+            formatting = dict(
+                font_name="Aref Ruqaa", font_size_pt=18.0,
+                alignment="right", space_after_pt=10.0 if index == 2 else 12.0,
+            )
+        elif index == closing_index:
+            formatting = dict(
+                font_name="Aref Ruqaa", font_size_pt=16.0,
+                alignment="center", space_before_pt=10.0, space_after_pt=8.0,
+            )
+        elif index == final_index:
+            formatting = dict(
+                font_name="Times New Roman", font_size_pt=16.0, bold=True,
+                alignment="center", space_after_pt=0.0,
+            )
+        else:  # generated letter body
+            formatting = dict(
+                font_name="Sakkal Majalla", font_size_pt=16.0,
+                alignment="justify", space_after_pt=4.0, line_spacing=1.15,
+            )
+        _apply_rtl_to_paragraph(paragraph, **formatting)
+
+    output = io.BytesIO()
+    doc.save(output)
+    data = output.getvalue()
+    if out_path is not None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(data)
+    return data, profile
+
+
 def _doc_has_text(doc, needle: str) -> bool:
     return any(needle in p.text for p in doc.paragraphs) or any(
         needle in cell.text for table in doc.tables for row in table.rows for cell in row.cells
@@ -803,13 +928,13 @@ class LetterStyle:
     include_basmala: bool = True           # "بسم الله الرحمن الرحيم" centered
     include_date_row: bool = True          # التاريخ / الموافق placeholder lines
     include_recipient_block: bool = True   # "سعادة / (...) المحترم"
-    include_signature_block: bool = True   # signature + title lines
-    include_closing_phrase: bool = True    # "وتقبلوا وافر التحية والتقدير،،،"
+    include_signature_block: bool = True   # locked organization identity
+    include_closing_phrase: bool = True    # locked closing phrase
 
     # Closing phrase text
-    closing_phrase: str = "وتقبلوا وافر التحية والتقدير،،،"
-    signature_title: str = "رئيس مجلس الإدارة"
-    signature_name_placeholder: str = "(يُستكمل اسم المُوقِّع)"
+    closing_phrase: str = "وتفضلوا بقبول خالص الشكر والتقدير،،"
+    signature_title: str = "جمعية الدعوة وتوعية الجاليات بمحافظة القطيف"
+    signature_name_placeholder: str = ""
 
     # Date row text (placeholders that the LLM/generator may fill in
     # if known_fields include the values, or remain for the user to fill)
@@ -827,7 +952,7 @@ class LetterStyle:
     basmala_text: str = "بسم الله الرحمن الرحيم"
 
     # Greeting
-    greeting_text: str = "السلام عليكم ورحمة الله وبركاته، وبعد:"
+    greeting_text: str = "السلام عليكم ورحمة الله وبركاته،"
 
     # Header alignment for the body (Arabic reads right-to-left)
     body_alignment: str = "right"          # "right" | "center" | "left" | "justified"

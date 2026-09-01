@@ -27,10 +27,13 @@ from rag.evidence import EvidenceBundle
 
 logger = logging.getLogger(__name__)
 
+FIXED_CLOSING = "وتفضلوا بقبول خالص الشكر والتقدير،،"
+FIXED_FOOTER = "جمعية الدعوة وتوعية الجاليات بمحافظة القطيف"
+
 
 SYSTEM_PROMPT = """\
 أنت كاتب خطابات إدارية محترف في جمعية أهلية سعودية.
-مهمتك: توليد مسودة خطبة رسمية بناءً على طلب المستخدم، مع الاستناد
+مهمتك: توليد مسودة خطاب رسمي بناءً على طلب المستخدم، مع الاستناد
 حصراً إلى المصادر المرفقة.
 
 قواعد صارمة (لا يمكن كسرها):
@@ -43,8 +46,11 @@ SYSTEM_PROMPT = """\
 3. **لا تخمين**: لا تضف أسماء أشخاص، أو أرقام، أو تواريخ، أو
    جهات من عندك حتى لو بدت واضحة. اكتب placeholder واضحاً
    مثل: (يُستكمل)، أو (يُضاف التاريخ)، أو (اسم الجهة) حسب السياق.
-4. **أسلوب رسمي سعودي**: ابدأ بـ"سعادة/معالي" إن لم يحدد المستخدم.
-   أنهِ الخطاب بـ"وتقبلوا وافر التحية والتقدير".
+4. **الافتتاحية حسب نوع المخاطَب**:
+   - إذا كان `entity_type=individual` فاكتب حرفياً:
+     `إلى سعادة [اسم الشخص / المسمى الوظيفي] حفظه الله`
+   - إذا كان `entity_type=organization` فاكتب حرفياً:
+     `المكرمون شركة / [اسم الشركة أو المؤسسة] سلمهم الله`
 5. **جمل كاملة**: كل جملة يجب أن تكون كاملة (فاعل + فعل +
    مفعول/متمم) ومنتهية بعلامة ترقيم. لا تترك جملاً ناقصة
    أو تنتهي بـ"..." إلا إذا كان المعنى واضحاً أن هناك متتمّ
@@ -54,8 +60,28 @@ SYSTEM_PROMPT = """\
    صياغة فكرة، ادمجها في فقرة واحدة أو احذف التكرار.
 7. **لا حشو**: لا تضف عبارات عامة لا تخدم المعنى مثل "في إطار
    سعينا الدؤوب نحو تحقيق رؤيتنا...". اكتب مباشرة.
-8. **لا مخرجات نموذجية**: لا تطبع JSON، أو شيفرة، أو قوالب
-   placeholder. اكتب نص الخطاب فقط.
+8. **لا مخرجات نموذجية**: لا تطبع JSON أو شيفرة. اكتب نص الخطاب فقط.
+9. **هيكل إلزامي**: التزم بهذا الترتيب حصراً، من دون ترويسة مسودة أو
+   بسملة أو تاريخ أو توقيع شخصي أو أي قسم إضافي داخل جسم الخطاب:
+
+   [الافتتاحية حسب قاعدة entity_type]
+
+   الموضوع: [موضوع الخطاب]
+
+   السلام عليكم ورحمة الله وبركاته،
+
+   أما بعد،
+
+   [المتن المستند إلى المصادر]
+
+   وتفضلوا بقبول خالص الشكر والتقدير،،
+
+   جمعية الدعوة وتوعية الجاليات بمحافظة القطيف
+10. **الخاتمة ثابتة**: لا تغيّر عبارة الختام ولا اسم الجمعية مطلقاً.
+11. **تنظيم المتن الرسمي**: اكتب المتن في فقرات نثرية رسمية مترابطة
+    ومكتملة، من ثلاث إلى خمس فقرات موجزة بحسب الحاجة. لا تستخدم قوائم
+    نقطية أو عناوين فرعية أو حقولاً معلّقة إلا إذا كانت طبيعة الطلب
+    تستلزم ذلك فعلاً.
 
 خطوات قبل الإرسال (مراجعة ذاتية):
 - اقرأ المسودة كاملة. هل يوجد تكرار؟ احذف المكرر.
@@ -63,8 +89,8 @@ SYSTEM_PROMPT = """\
 - هل كل ادعاء له مصدر؟ أضف الوسم أو ضع placeholder "لم يتم العثور على مصدر".
 - هل الأسماء والتواريخ من المستخدم/المصادر فقط؟ إن لا، استبدل بـ placeholder.
 
-أنتج فقط جسم الخطاب، بدون شروحات أو مقدمات. استخدم عناوين فرعية
-`##` إذا كان الخطاب طويلاً.
+أنتج فقط جسم الخطاب، بدون شروحات أو مقدمات، ومن دون عناوين فرعية
+داخل متن الخطاب.
 
 بعد جسم الخطاب مباشرة، أضف قسماً:
 
@@ -90,13 +116,16 @@ USER_PROMPT_TEMPLATE = """\
 
 ## التعليمات
 - اكتب جسم الخطاب مع `[source: <label>]` بعد كل ادعاء.
+- استخدم `entity_type` من الحقول المعروفة لتحديد الافتتاحية.
+- التزم بالترتيب الرسمي المحدد في رسالة النظام حرفياً.
+- ثبّت الختام باسم: جمعية الدعوة وتوعية الجاليات بمحافظة القطيف.
 - في نهاية الخطاب، اكتب قسم `## المصادر` مع كل وسام استخدمته.
 - إذا لم تجد دعماً في المصادر، اكتب `> لم يتم العثور على مصدر يثبت هذا.`
 """
 
 
 CORRECTION_SYSTEM_PROMPT = """\
-أنت مراجع لغوي وقانوني محترف. مهمتك: تعديل مسودة خطبة إدارية
+أنت مراجع لغوي وقانوني محترف. مهمتك: تعديل مسودة خطاب إداري
 بحيث تعالج ملاحظات المراجع الأولى، مع الحفاظ على الاستناد الحصري
 للمصادر المرفقة.
 
@@ -110,8 +139,9 @@ CORRECTION_SYSTEM_PROMPT = """\
 4. إذا لم تجد دعماً لمعلومة، اكتبها بصيغة:
    `> لم يتم العثور على مصدر يثبت هذا.`
 5. لا تضف معلومات من عندك حتى لو بدت واضحة.
-6. اكتب بأسلوب رسمي سعودي، وابدأ بـ"سعادة/معالي" إن لم يحدد المستخدم.
-7. أنهِ الخطاب بـ"وتقبلوا وافر التحية والتقدير".
+6. طبّق افتتاحية `individual` أو `organization` المحددة في قالب النظام.
+7. أنهِ الخطاب حرفياً بـ"وتفضلوا بقبول خالص الشكر والتقدير،،" ثم
+   "جمعية الدعوة وتوعية الجاليات بمحافظة القطيف".
 
 قواعد إضافية خاصة بالتصحيح (لا تكسرها):
 8. **لا تكرار مطلقاً**: لا تكرّر أي فقرة أو جملة. إذا كانت المسودة
@@ -122,6 +152,10 @@ CORRECTION_SYSTEM_PROMPT = """\
 11. **placeholder واضح**: إذا كان هناك حقل مطلوب لا تعرفه
     (اسم، تاريخ، رقم)، اكتب (يُستكمل) أو (يُضاف) حسب السياق، ولا
     تخمّن.
+12. حافظ على الترتيب الحرفي: الافتتاحية، الموضوع، السلام، أما بعد،
+    المتن، عبارة الختام الثابتة، ثم اسم الجمعية الثابت.
+13. نظّم المتن في فقرات نثرية رسمية مترابطة ومكتملة، وتجنّب القوائم
+    النقطية والعناوين الفرعية ما لم تستلزمها طبيعة الطلب فعلاً.
 
 خطوات قبل الإرسال (مراجعة ذاتية):
 - اقرأ المسودة كاملة. هل يوجد تكرار؟ احذف المكرر.
@@ -303,6 +337,12 @@ class LetterGenerator:
         # Split the body from the sources block
         body_only, sources_block = _split_sources_block(body)
         body_only = _cleanup_model_output(body_only)
+        body_only = enforce_official_structure(
+            body_only,
+            known_fields=known_fields,
+            fallback_subject=letter_type_ar,
+        )
+        body = f"{body_only}\n\n{sources_block}".strip()
         citations = _parse_citations(sources_block)
 
         return GeneratedDraft(
@@ -388,6 +428,12 @@ class LetterGenerator:
         body = _cleanup_model_output(body)
         body_only, sources_block = _split_sources_block(body)
         body_only = _cleanup_model_output(body_only)
+        body_only = enforce_official_structure(
+            body_only,
+            known_fields=known_fields,
+            fallback_subject=letter_type_ar,
+        )
+        body = f"{body_only}\n\n{sources_block}".strip()
         citations = _parse_citations(sources_block)
         return GeneratedDraft(
             body=body,
@@ -513,6 +559,98 @@ def _cleanup_model_output(text: str) -> str:
     return "\n".join(out)
 
 
+def _resolved_entity_type(known_fields: dict[str, str]) -> str:
+    """Return the canonical addressee type, with a compatibility fallback."""
+    raw = (known_fields.get("entity_type") or "").strip().lower()
+    if raw in {"individual", "person", "شخص", "فرد", "مسؤول"}:
+        return "individual"
+    if raw in {"organization", "company", "entity", "شركة", "مؤسسة", "جهة"}:
+        return "organization"
+
+    # Existing API clients predate entity_type. Preserve sensible output for
+    # obviously personal titles while treating the common institutional case
+    # as the default.
+    recipient = known_fields.get("recipient_name", "")
+    personal_markers = ("الأستاذ", "الدكتور", "الشيخ", "رئيس", "مدير", "سعادة", "معالي")
+    return "individual" if any(marker in recipient for marker in personal_markers) else "organization"
+
+
+def build_recipient_line(known_fields: dict[str, str]) -> str:
+    """Build the locked opening line from entity_type + recipient_name."""
+    recipient = (known_fields.get("recipient_name") or "{{recipient_name}}").strip()
+    if _resolved_entity_type(known_fields) == "individual":
+        return f"إلى سعادة {recipient} حفظه الله"
+
+    # Avoid "شركة / شركة ..." when older callers include the legal form in
+    # recipient_name. The fixed prefix already supplies it.
+    recipient = re.sub(r"^(?:شركة|مؤسسة|جمعية|جهة)\s*/?\s*", "", recipient).strip()
+    recipient = recipient or "{{recipient_name}}"
+    return f"المكرمون شركة / {recipient} سلمهم الله"
+
+
+def _extract_subject(text: str, known_fields: dict[str, str], fallback: str | None) -> str:
+    for key in ("subject", "letter_subject", "project_name"):
+        value = (known_fields.get(key) or "").strip()
+        if value:
+            return value
+    match = re.search(r"^\s*(?:\*\*)?الموضوع\s*:\s*(.+?)(?:\*\*)?\s*$", text, re.MULTILINE)
+    if match:
+        return re.sub(r"\s*\[source:\s*[^\]]+\]", "", match.group(1)).strip()
+    return (fallback or "{{موضوع_الخطاب}}").strip()
+
+
+def _extract_main_content(text: str) -> str:
+    """Remove any model-generated envelope while keeping grounded body text."""
+    working = text.strip()
+    after = re.search(r"أما\s+بعد\s*[،,:]?", working)
+    if after:
+        working = working[after.end():]
+    closing = re.search(
+        r"(?:وتفضلوا\s+بقبول\s+خالص\s+الشكر\s+والتقدير|"
+        r"وتقبلوا\s+وافر\s+التحية\s+والتقدير)",
+        working,
+    )
+    if closing:
+        working = working[:closing.start()]
+
+    ignored = (
+        "إلى سعادة", "المكرمون شركة", "الموضوع:",
+        "السلام عليكم ورحمة الله وبركاته", "أما بعد",
+        FIXED_CLOSING, FIXED_FOOTER, "# مسودة", "بسم الله الرحمن الرحيم",
+    )
+    lines = [
+        line.rstrip() for line in working.splitlines()
+        if line.strip() and not any(line.strip().startswith(prefix) for prefix in ignored)
+    ]
+    return "\n".join(lines).strip() or "> لم يتم العثور على مصدر يثبت هذا."
+
+
+def enforce_official_structure(
+    text: str,
+    *,
+    known_fields: dict[str, str] | None = None,
+    fallback_subject: str | None = None,
+) -> str:
+    """Deterministically enforce the organization's official letter layout.
+
+    Prompt instructions are necessary but not sufficient for a hard product
+    requirement. This formatter ensures every model response and correction
+    has exactly one opening, subject, greeting, transition, closing and footer.
+    """
+    fields = known_fields or {}
+    subject = _extract_subject(text, fields, fallback_subject)
+    content = _extract_main_content(text)
+    return "\n\n".join((
+        build_recipient_line(fields),
+        f"الموضوع: {subject}",
+        "السلام عليكم ورحمة الله وبركاته،",
+        "أما بعد،",
+        content,
+        FIXED_CLOSING,
+        FIXED_FOOTER,
+    ))
+
+
 def _split_sources_block(text: str) -> tuple[str, str]:
     """Split the LLM output into (body, sources_block).
 
@@ -607,4 +745,8 @@ async def _post_with_backoff(
     raise RuntimeError("openrouter: exhausted retries without a response")
 
 
-__all__ = ["LetterGenerator", "GeneratedDraft", "from_env"]
+__all__ = [
+    "LetterGenerator", "GeneratedDraft", "from_env",
+    "build_recipient_line", "enforce_official_structure",
+    "FIXED_CLOSING", "FIXED_FOOTER",
+]
