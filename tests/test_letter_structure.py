@@ -84,8 +84,8 @@ def test_branded_export_preserves_header_and_footer_media():
     assert document.paragraphs[4].alignment == WD_PARAGRAPH_ALIGNMENT.JUSTIFY
     assert document.paragraphs[-2].alignment == WD_PARAGRAPH_ALIGNMENT.CENTER
     assert document.paragraphs[-1].alignment == WD_PARAGRAPH_ALIGNMENT.CENTER
-    assert document.paragraphs[4].runs[0].font.name == "Sakkal Majalla"
-    assert document.paragraphs[4].runs[0].font.size.pt == 16.0
+    assert all(run.font.name == "Times New Roman" for run in visible_runs)
+    assert document.paragraphs[4].runs[0].font.size.pt == 15.0
 
     w_ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
     assert all(p._p.pPr.find(f"{w_ns}bidi") is not None for p in document.paragraphs)

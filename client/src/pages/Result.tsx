@@ -41,7 +41,15 @@ export default function Result({
     setDownloading('docx')
     setDownloadError(null)
     try {
-      const blob = await downloadDocx({ request, fields })
+      let blob: Blob
+      if (result.docx_url) {
+        const response = await fetch(result.docx_url)
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        blob = await response.blob()
+      } else {
+        // Compatibility fallback when generated-file storage is unavailable.
+        blob = await downloadDocx({ request, fields })
+      }
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -86,7 +94,7 @@ export default function Result({
               {result.template_profile ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 text-amber-800 px-3 py-1 text-xs font-semibold">
                   <ScrollText className="w-3.5 h-3.5" />
-                  تنسيق موروث من قالب محفوظ
+                  القالب الرسمي المعتمد للجمعية
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-sage-100 text-sage-800 px-3 py-1 text-xs font-semibold">

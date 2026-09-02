@@ -686,12 +686,12 @@ def build_official_branded_letter(
             )
         elif index in (2, 3):  # greeting and transition
             formatting = dict(
-                font_name="Aref Ruqaa", font_size_pt=18.0,
+                font_name="Times New Roman", font_size_pt=16.0,
                 alignment="right", space_after_pt=10.0 if index == 2 else 12.0,
             )
         elif index == closing_index:
             formatting = dict(
-                font_name="Aref Ruqaa", font_size_pt=16.0,
+                font_name="Times New Roman", font_size_pt=16.0,
                 alignment="center", space_before_pt=10.0, space_after_pt=8.0,
             )
         elif index == final_index:
@@ -701,7 +701,7 @@ def build_official_branded_letter(
             )
         else:  # generated letter body
             formatting = dict(
-                font_name="Sakkal Majalla", font_size_pt=16.0,
+                font_name="Times New Roman", font_size_pt=15.0,
                 alignment="justify", space_after_pt=4.0, line_spacing=1.15,
             )
         _apply_rtl_to_paragraph(paragraph, **formatting)
