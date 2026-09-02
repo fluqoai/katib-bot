@@ -151,6 +151,7 @@ export type GenerateResult = {
   letter_style: LetterStyle | null
   docx_url: string | null
   pdf_url: string | null
+  docx_base64: string | null
   stages: { stage: string; status: string; note: string }[]
 }
 

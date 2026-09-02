@@ -63,9 +63,6 @@ export default function Processing({
     generateLetter({
       request,
       fields,
-      // Persist the exact DOCX created during this generation. The Result
-      // screen downloads this file instead of running the AI pipeline again.
-      upload_outputs: true,
       use_legacy_template: useLegacyTemplate,
       style_overrides: styleOverrides,
     })

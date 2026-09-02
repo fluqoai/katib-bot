@@ -35,6 +35,7 @@ the admin API.
 """
 from __future__ import annotations
 
+import base64
 import io
 import logging
 import os
@@ -287,6 +288,13 @@ async def generate(
 
         "docx_url": docx_url,
         "pdf_url":  pdf_url,
+        # Carry the already-generated Word file with the reviewed response.
+        # The client can therefore download exactly what it previewed without
+        # running the AI pipeline a second time.
+        "docx_base64": (
+            base64.b64encode(result.docx_bytes).decode("ascii")
+            if result.docx_bytes else None
+        ),
     }
 
 

@@ -42,7 +42,16 @@ export default function Result({
     setDownloadError(null)
     try {
       let blob: Blob
-      if (result.docx_url) {
+      if (result.docx_base64) {
+        const binary = window.atob(result.docx_base64)
+        const bytes = new Uint8Array(binary.length)
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index)
+        }
+        blob = new Blob([bytes], {
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        })
+      } else if (result.docx_url) {
         const response = await fetch(result.docx_url)
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         blob = await response.blob()
