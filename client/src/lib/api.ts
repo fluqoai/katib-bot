@@ -19,12 +19,23 @@
 const ADMIN_TOKEN =
   (import.meta as any).env?.VITE_ADMIN_TOKEN || 'dev'
 
+// Long-running letter generation must go directly to the production API.
+// Routing it through the Vercel rewrite causes the proxy to time out before
+// the AI pipeline and DOCX export finish.
+const API_BASE =
+  (import.meta as any).env?.VITE_API_BASE_URL ||
+  ((import.meta as any).env?.PROD ? 'https://api.katibai.xyz' : '')
+
+function apiUrl(path: string): string {
+  return `${API_BASE}${path}`
+}
+
 function headers(extra: Record<string, string> = {}): Record<string, string> {
   return { 'X-Admin-Token': ADMIN_TOKEN, ...extra }
 }
 
 async function jsonFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     ...init,
     headers: headers(
       init.body && !(init.body instanceof FormData)
@@ -200,7 +211,7 @@ export async function downloadDocx(body: {
   use_legacy_template?: boolean
   style_overrides?: LetterStyleOverrides
 }): Promise<Blob> {
-  const res = await fetch('/api/letters/generate/docx', {
+  const res = await fetch(apiUrl('/api/letters/generate/docx'), {
     method: 'POST',
     headers: headers({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
@@ -216,7 +227,7 @@ export async function downloadPdf(body: {
   request: string
   fields?: Record<string, string>
 }): Promise<Blob> {
-  const res = await fetch('/api/letters/generate/pdf', {
+  const res = await fetch(apiUrl('/api/letters/generate/pdf'), {
     method: 'POST',
     headers: headers({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
